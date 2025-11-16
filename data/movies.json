@@ -1,0 +1,22 @@
+[
+  {"movieId": 1, "title": "The Shawshank Redemption", "genres": ["Drama"]},
+  {"movieId": 2, "title": "The Godfather", "genres": ["Crime", "Drama"]},
+  {"movieId": 3, "title": "The Dark Knight", "genres": ["Action", "Crime", "Drama"]},
+  {"movieId": 4, "title": "Pulp Fiction", "genres": ["Crime", "Drama"]},
+  {"movieId": 5, "title": "The Lord of the Rings: The Return of the King", "genres": ["Adventure", "Fantasy"]},
+  {"movieId": 6, "title": "Forrest Gump", "genres": ["Drama", "Romance"]},
+  {"movieId": 7, "title": "Inception", "genres": ["Action", "Sci-Fi"]},
+  {"movieId": 8, "title": "Fight Club", "genres": ["Drama"]},
+  {"movieId": 9, "title": "The Matrix", "genres": ["Action", "Sci-Fi"]},
+  {"movieId": 10, "title": "Goodfellas", "genres": ["Biography", "Crime", "Drama"]},
+  {"movieId": 11, "title": "The Lord of the Rings: The Fellowship of the Ring", "genres": ["Adventure", "Fantasy"]},
+  {"movieId": 12, "title": "Star Wars: Episode V - The Empire Strikes Back", "genres": ["Action", "Adventure", "Sci-Fi"]},
+  {"movieId": 13, "title": "Interstellar", "genres": ["Adventure", "Drama", "Sci-Fi"]},
+  {"movieId": 14, "title": "Seven Samurai", "genres": ["Action", "Adventure", "Drama"]},
+  {"movieId": 15, "title": "City of God", "genres": ["Crime", "Drama"]},
+  {"movieId": 16, "title": "The Silence of the Lambs", "genres": ["Crime", "Drama", "Thriller"]},
+  {"movieId": 17, "title": "Saving Private Ryan", "genres": ["Drama", "War"]},
+  {"movieId": 18, "title": "Spirited Away", "genres": ["Animation", "Adventure", "Family"]},
+  {"movieId": 19, "title": "Parasite", "genres": ["Comedy", "Drama", "Thriller"]},
+  {"movieId": 20, "title": "Gladiator", "genres": ["Action", "Adventure", "Drama"]}
+]
