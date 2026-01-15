@@ -26,3 +26,5 @@ data/user_movie_matrix.csv
 
 # Optional: ignore JSON exports if auto-generated
 data/*.json
+__pycache__/
+*.pyc
