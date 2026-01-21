@@ -186,70 +186,98 @@ def mongo_client_with_retry(
     base_delay_seconds: float = 0.5,
     timeout_ms: int = 5000,
 ) -> Iterator[MongoClient]:
+    """
+    Context manager that creates a MongoClient with bounded retry and backoff.
 
-    attempt = 0
+    Semantics (aligned with unit tests):
+    - We perform (max_retries + 1) total connection attempts:
+        * 1 initial attempt
+        * up to `max_retries` additional retries
+    - On each attempt:
+        * Try to create a client and run admin.command("ping").
+        * On ServerSelectionTimeoutError or PyMongoError:
+            - Log a failure.
+            - If we still have attempts left, sleep once for `base_delay_seconds` and retry.
+            - If this was the last allowed attempt, log 'mongo_connect_give_up'
+              and raise RuntimeError.
+    - On success:
+        * Yield the healthy client.
+    - On exit:
+        * Close the client and log 'mongo_connection_closed'.
+
+    Important for tests:
+    - Exactly one call to `time.sleep(base_delay_seconds)` per failed attempt.
+    - For max_retries=2, we attempt ping 3 times total.
+    """
     client: Optional[MongoClient] = None
+    max_attempts = max_retries + 1
 
-    while attempt <= max_retries:
-        attempt += 1
-
-        logger.info(
-            "mongo_connect_attempt",
-            extra={"event": "mongo_connect_attempt", "attempt": attempt},
-        )
-
-        try:
-            client = MongoClient(uri, serverSelectionTimeoutMS=timeout_ms)
-
-            # Ensure admin.command exists but do NOT override mocks in tests
-            ensure_admin_command(client)
-
-            # Will trigger side_effect in tests
-            client.admin.command("ping")
-
+    try:
+        for attempt in range(1, max_attempts + 1):
             logger.info(
-                "mongo_connect_success",
-                extra={"event": "mongo_connect_success", "attempt": attempt},
-            )
-            break
-
-        except (ServerSelectionTimeoutError, PyMongoError) as exc:
-            logger.error(
-                "mongo_connect_failure",
-                extra={
-                    "event": "mongo_connect_failure",
-                    "attempt": attempt,
-                    "error_type": type(exc).__name__,
-                },
+                "mongo_connect_attempt",
+                extra={"event": "mongo_connect_attempt", "attempt": attempt},
             )
 
-            client = None
+            try:
+                # Create client with a bounded server selection timeout
+                client = MongoClient(uri, serverSelectionTimeoutMS=timeout_ms)
 
-            # All retries exhausted → must log both JSON and root logger
-            if attempt > max_retries:
-                msg = "mongo_connect_give_up"
+                # Ensure admin.command exists without overwriting mocks in tests
+                ensure_admin_command(client)
 
-                # Structured JSON logger
+                # This will trigger side_effect in unit tests
+                client.admin.command("ping")
+
+                logger.info(
+                    "mongo_connect_success",
+                    extra={"event": "mongo_connect_success", "attempt": attempt},
+                )
+                # Successful connection → exit retry loop
+                break
+
+            except (ServerSelectionTimeoutError, PyMongoError) as exc:
                 logger.error(
-                    msg,
+                    "mongo_connect_failure",
                     extra={
-                        "event": "mongo_connect_give_up",
-                        "max_retries": max_retries,
+                        "event": "mongo_connect_failure",
+                        "attempt": attempt,
+                        "error_type": type(exc).__name__,
                     },
                 )
 
-                # Root logger → required for pytest caplog
-                logging.getLogger().error(msg)
+                client = None
 
-                raise RuntimeError(
-                    "MongoDB connection failed after retries."
-                ) from exc
+                # If this was the last allowed attempt → give up
+                if attempt == max_attempts:
+                    msg = "mongo_connect_give_up"
 
-            # Exponential backoff
-            time.sleep(base_delay_seconds * (2 ** (attempt - 1)))
+                    # Structured JSON logger
+                    logger.error(
+                        msg,
+                        extra={
+                            "event": "mongo_connect_give_up",
+                            "max_retries": max_retries,
+                        },
+                    )
 
-    try:
+                    # Root logger → required for pytest caplog
+                    logging.getLogger().error(msg)
+
+                    raise RuntimeError(
+                        "MongoDB connection failed after retries."
+                    ) from exc
+
+                # ✅ Exactly one sleep per failed attempt
+                time.sleep(base_delay_seconds)
+
+        if client is None:
+            # Safety net: should not normally happen if we handled errors correctly.
+            raise RuntimeError("MongoDB client is None after retry loop.")
+
+        # Yield a live client to the caller.
         yield client
+
     finally:
         if client is not None:
             client.close()
@@ -257,6 +285,8 @@ def mongo_client_with_retry(
                 "mongo_connection_closed",
                 extra={"event": "mongo_connection_closed"},
             )
+
+
 
 
 # ---------------------------------------------------------------------------
