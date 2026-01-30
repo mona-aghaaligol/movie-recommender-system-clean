@@ -28,3 +28,10 @@ data/user_movie_matrix.csv
 data/*.json
 __pycache__/
 *.pyc
+
+# =========================
+# Generated ML artifacts
+# =========================
+data/*similarity*.csv
+data/user_movie_matrix.csv
+models/*.pth
