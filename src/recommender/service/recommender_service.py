@@ -19,7 +19,7 @@ from typing import List, Optional
 
 import pandas as pd
 
-from src.recommender.core.recommend_for_user import (
+from ..domain.recommend_for_user import (
     recommend_for_user,
     RecommendParams,
 )
