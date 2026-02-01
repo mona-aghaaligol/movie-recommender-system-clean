@@ -6,7 +6,7 @@ import pytest
 # ✅ اضافه کردن مسیر src به مسیرهای قابل دسترسی (نسبت به پوشه tests)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
-from recommender.core.predict_cf import predict_rating
+from recommender.domain.predict_cf import predict_rating
 
 
 @pytest.fixture(scope="session")

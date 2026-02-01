@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 import numpy as np
 import pandas as pd
 
-from .core.predict_cf import predict_rating
+from .domain.predict_cf import predict_rating
 
 
 DEFAULT_RANDOM_SEED: int = 42
