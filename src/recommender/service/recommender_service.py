@@ -7,7 +7,7 @@ by upper layers such as FastAPI, CLIs, or batch pipelines.
 Important:
     - This module does NOT perform any I/O (no DB, no CSV, no config loading).
     - This module does NOT own ML/CF logic.
-    - This module ONLY orchestrates domain/core functionality and exposes
+    - This module ONLY orchestrates domain functionality and exposes
       type-safe contracts for recommendation-related use cases.
 
 Data and algorithm execution dependencies are injected from the outside
@@ -38,7 +38,7 @@ class Recommendation:
     Attributes
     ----------
     movie_id:
-        Internal movie identifier (as used in the dataset/core).
+        Internal movie identifier (as used in the dataset).
     score:
         Relevance score for the recommendation. Higher means better.
     title:
@@ -77,7 +77,7 @@ class RecommenderService:
 
     This service is intentionally thin. It exposes contracts for retrieving
     recommendations and similarity results, while delegating the actual
-    collaborative filtering and ranking logic to the domain/core layer.
+    collaborative filtering and ranking logic to the domain layer.
 
     Design principles:
         - No I/O in this layer.
@@ -131,14 +131,14 @@ class RecommenderService:
         """
         Retrieve recommendations for a given user.
 
-        This method orchestrates the call to the domain/core layer
+        This method orchestrates the call to the domain layer
         (e.g., collaborative filtering + ranking) and maps the result
         into a type-safe list of Recommendation objects.
 
         Parameters
         ----------
         user_id:
-            User identifier in the dataset/core.
+            User identifier in the dataset.
         limit:
             Maximum number of recommendations to return.
         min_score:
@@ -226,11 +226,11 @@ class RecommenderService:
         Notes
         -----
         This is a placeholder. In a later iteration, this method will invoke
-        a similarity engine from the domain/core layer (e.g., cosine similarity
+        a similarity engine from the domain layer (e.g., cosine similarity
         over a precomputed similarity matrix).
         """
         raise NotImplementedError(
             "get_similar_movies is not implemented yet. "
-            "It will be wired to domain/core similarity computations "
+            "It will be wired to domain similarity computations "
             "in a later iteration."
         )
