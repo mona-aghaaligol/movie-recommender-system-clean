@@ -35,3 +35,6 @@ __pycache__/
 data/*similarity*.csv
 data/user_movie_matrix.csv
 models/*.pth
+
+# Pytest cache
+.pytest_cache/
