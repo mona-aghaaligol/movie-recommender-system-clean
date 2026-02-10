@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Movie Recommender — Demo UI</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
+      .card { max-width: 900px; padding: 18px; border: 1px solid #ddd; border-radius: 12px; }
+      .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+      label { display: block; font-size: 12px; color: #444; margin-bottom: 6px; }
+      input { padding: 10px 12px; border: 1px solid #ccc; border-radius: 10px; min-width: 160px; }
+      button { padding: 10px 14px; border: 0; border-radius: 10px; cursor: pointer; }
+      button.primary { background: #111; color: #fff; }
+      button.secondary { background: #f2f2f2; }
+      .muted { color: #666; font-size: 13px; }
+      .results { margin-top: 18px; }
+      .placeholder { padding: 12px; border: 1px dashed #bbb; border-radius: 10px; color: #666; }
+    </style>
+  </head>
+
+  <body>
+    <div class="card">
+      <h1 style="margin-top:0;">Movie Recommender — Demo UI</h1>
+      <p class="muted">
+        This is a <b>reference client</b> UI. Next step: call the API and render results.
+      </p>
+
+      <div class="row">
+        <div>
+          <label for="userId">User ID</label>
+          <input id="userId" type="number" min="1" value="1" />
+        </div>
+
+        <div>
+          <label for="limit">Limit</label>
+          <input id="limit" type="number" min="1" max="100" value="5" />
+        </div>
+
+        <div>
+          <button class="primary" id="btn" type="button">Recommend</button>
+          <button class="secondary" id="btnClear" type="button">Clear</button>
+        </div>
+      </div>
+
+      <div class="results">
+        <div class="placeholder" id="placeholder">
+          Results will appear here after we wire the API call.
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const btn = document.getElementById("btn");
+      const btnClear = document.getElementById("btnClear");
+      const placeholder = document.getElementById("placeholder");
+
+      function renderResults(items) {
+        if (!items || items.length === 0) {
+          placeholder.innerHTML = "No recommendations returned.";
+          return;
+        }
+
+        placeholder.innerHTML = items
+          .map(
+            (x, i) => `
+            <div style="padding:10px;border-bottom:1px solid #eee;">
+              <b>${i + 1}. ${x.title}</b><br/>
+              <span style="color:#555;">movie_id:</span> ${x.movie_id}
+              &nbsp;|&nbsp;
+              <span style="color:#555;">score:</span> ${x.score}
+            </div>
+          `
+          )
+          .join("");
+      }
+
+      async function fetchRecommendations(userId, limit) {
+        placeholder.textContent = "Loading recommendations…";
+
+        const url = `/v1/recommendations/${userId}?limit=${limit}`;
+
+        try {
+          const res = await fetch(url);
+
+          if (!res.ok) {
+            const text = await res.text();
+            placeholder.textContent = `Error ${res.status}: ${text}`;
+            return;
+          }
+
+          const data = await res.json();
+          renderResults(data);
+        } catch (err) {
+          placeholder.textContent = "Network error. Is the server running?";
+        }
+      }
+
+      btn.addEventListener("click", () => {
+        const userId = document.getElementById("userId").value || 1;
+        const limit = document.getElementById("limit").value || 5;
+        fetchRecommendations(userId, limit);
+      });
+
+      btnClear.addEventListener("click", () => {
+        placeholder.textContent =
+          "Results will appear here after we wire the API call.";
+      });
+    </script>
+
+  </body>
+</html>
