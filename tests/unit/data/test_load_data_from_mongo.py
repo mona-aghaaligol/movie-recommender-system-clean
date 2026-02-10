@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 from io import StringIO
@@ -5,22 +7,47 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
-from pymongo.errors import ServerSelectionTimeoutError, PyMongoError
+from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
 
 import src.recommender.data.load_data.load_data_from_mongo as mod
 from src.recommender.data.load_data.load_data_from_mongo import (
     MongoConfig,
-    JsonFormatter,
-    configure_logger,
-    load_mongo_config,
-    mongo_client_with_retry,
-    get_database,
-    get_collection,
-    validate_schema,
     collection_to_dataframe,
-    load_movies_and_ratings_from_db,
+    get_collection,
+    get_database,
+    load_mongo_config,
     load_movies_and_ratings,
+    load_movies_and_ratings_from_db,
+    mongo_client_with_retry,
+    validate_schema,
 )
+
+from src.recommender.logging_utils import JsonFormatter, configure_logger
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _attach_caplog_to_logger(caplog, logger: logging.Logger) -> None:
+    """
+    Attach caplog handler to a non-propagating logger.
+
+    Our production logger is configured with propagate=False (correct). Tests that
+    assert on logs should attach caplog.handler directly to the logger.
+    """
+    logger.addHandler(caplog.handler)
+
+
+def _detach_caplog_from_logger(caplog, logger: logging.Logger) -> None:
+    logger.removeHandler(caplog.handler)
+
+
+def _has_event(caplog, event_name: str) -> bool:
+    for rec in caplog.records:
+        if getattr(rec, "event", None) == event_name:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -28,8 +55,6 @@ from src.recommender.data.load_data.load_data_from_mongo import (
 # ---------------------------------------------------------------------------
 
 class FakeCollection:
-    """Minimal stand-in for MongoDB Collection."""
-
     def __init__(self, documents):
         self._documents = documents
         self.find_calls = []
@@ -45,8 +70,6 @@ class FakeCollection:
 
 
 class FakeDatabase:
-    """Simple dictionary-backed fake DB."""
-
     def __init__(self, collections):
         self._collections = collections
         self.getitem_calls = []
@@ -57,8 +80,6 @@ class FakeDatabase:
 
 
 class FakeClient:
-    """Fake MongoClient that exposes DB via __getitem__."""
-
     def __init__(self, db):
         self._db = db
         self.closed = False
@@ -72,7 +93,7 @@ class FakeClient:
 
 
 # ---------------------------------------------------------------------------
-# JsonFormatter Tests
+# Central JsonFormatter / configure_logger Tests
 # ---------------------------------------------------------------------------
 
 def test_json_formatter_outputs_valid_json_and_expected_keys():
@@ -80,9 +101,11 @@ def test_json_formatter_outputs_valid_json_and_expected_keys():
     stream = StringIO()
     handler = logging.StreamHandler(stream)
     handler.setFormatter(JsonFormatter())
+
     logger.handlers = []
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
+    logger.propagate = False
 
     logger.info("hello", extra={"event": "test_event", "user_id": 55})
     payload = json.loads(stream.getvalue())
@@ -94,10 +117,6 @@ def test_json_formatter_outputs_valid_json_and_expected_keys():
     assert payload["user_id"] == 55
     assert "lineno" not in payload
 
-
-# ---------------------------------------------------------------------------
-# configure_logger Tests
-# ---------------------------------------------------------------------------
 
 def test_configure_logger_is_idempotent():
     logger_name = "config_test_logger"
@@ -134,10 +153,15 @@ def test_load_mongo_config_reads_environment(monkeypatch):
 def test_load_mongo_config_missing_uri_raises(monkeypatch, caplog):
     monkeypatch.delenv("MONGO_URI_DEV", raising=False)
 
-    with caplog.at_level(logging.ERROR), pytest.raises(RuntimeError):
-        load_mongo_config()
+    caplog.set_level(logging.ERROR)
+    _attach_caplog_to_logger(caplog, mod.logger)
+    try:
+        with pytest.raises(RuntimeError):
+            load_mongo_config()
 
-    assert "config_error" in caplog.text
+        assert _has_event(caplog, "config_error")
+    finally:
+        _detach_caplog_from_logger(caplog, mod.logger)
 
 
 # ---------------------------------------------------------------------------
@@ -178,10 +202,15 @@ def test_validate_schema_success():
 def test_validate_schema_failure_logs_and_raises(caplog):
     df = pd.DataFrame([{"a": 1}])
 
-    with caplog.at_level(logging.ERROR), pytest.raises(ValueError):
-        validate_schema(df, ("a", "b"), "test")
+    caplog.set_level(logging.ERROR)
+    _attach_caplog_to_logger(caplog, mod.logger)
+    try:
+        with pytest.raises(ValueError):
+            validate_schema(df, ("a", "b"), "test")
 
-    assert "schema_validation_failed" in caplog.text
+        assert _has_event(caplog, "schema_validation_failed")
+    finally:
+        _detach_caplog_from_logger(caplog, mod.logger)
 
 
 # ---------------------------------------------------------------------------
@@ -209,10 +238,15 @@ def test_collection_to_dataframe_success():
 def test_collection_to_dataframe_empty_raises(caplog):
     coll = FakeCollection([])
 
-    with caplog.at_level(logging.ERROR), pytest.raises(ValueError):
-        collection_to_dataframe(coll, "movies")
+    caplog.set_level(logging.ERROR)
+    _attach_caplog_to_logger(caplog, mod.logger)
+    try:
+        with pytest.raises(ValueError):
+            collection_to_dataframe(coll, "movies")
 
-    assert "empty_collection" in caplog.text
+        assert _has_event(caplog, "empty_collection")
+    finally:
+        _detach_caplog_from_logger(caplog, mod.logger)
 
 
 # ---------------------------------------------------------------------------
@@ -229,8 +263,7 @@ def _make_mock_client_with_side_effects(side_effects):
 def test_mongo_retry_succeeds_on_first_attempt():
     mock_client = _make_mock_client_with_side_effects([{"ok": 1}])
 
-    with patch("src.recommender.data.load_data.load_data_from_mongo.MongoClient",
-               return_value=mock_client), \
+    with patch("src.recommender.data.load_data.load_data_from_mongo.MongoClient", return_value=mock_client), \
          patch("src.recommender.data.load_data.load_data_from_mongo.time.sleep") as mock_sleep:
 
         with mongo_client_with_retry("mongodb://x") as client:
@@ -246,8 +279,7 @@ def test_mongo_retry_succeeds_on_second_attempt_with_backoff():
         {"ok": 1},
     ])
 
-    with patch("src.recommender.data.load_data.load_data_from_mongo.MongoClient",
-               return_value=mock_client), \
+    with patch("src.recommender.data.load_data.load_data_from_mongo.MongoClient", return_value=mock_client), \
          patch("src.recommender.data.load_data.load_data_from_mongo.time.sleep") as mock_sleep:
 
         with mongo_client_with_retry("mongodb://x", base_delay_seconds=0.5):
@@ -264,17 +296,20 @@ def test_mongo_retry_exhausts_all_attempts_and_raises(caplog):
         ServerSelectionTimeoutError("f3"),
     ])
 
-    with patch("src.recommender.data.load_data.load_data_from_mongo.MongoClient",
-               return_value=mock_client), \
-         patch("src.recommender.data.load_data.load_data_from_mongo.time.sleep"), \
-         caplog.at_level(logging.ERROR):
+    caplog.set_level(logging.ERROR)
+    _attach_caplog_to_logger(caplog, mod.logger)
+    try:
+        with patch("src.recommender.data.load_data.load_data_from_mongo.MongoClient", return_value=mock_client), \
+             patch("src.recommender.data.load_data.load_data_from_mongo.time.sleep"):
 
-        with pytest.raises(RuntimeError):
-            with mongo_client_with_retry("mongodb://x", max_retries=2):
-                pass
+            with pytest.raises(RuntimeError):
+                with mongo_client_with_retry("mongodb://x", max_retries=2):
+                    pass
 
-    assert mock_client.admin.command.call_count == 3
-    assert "mongo_connect_give_up" in caplog.text
+        assert mock_client.admin.command.call_count == 3
+        assert _has_event(caplog, "mongo_connect_give_up")
+    finally:
+        _detach_caplog_from_logger(caplog, mod.logger)
 
 
 # ---------------------------------------------------------------------------
@@ -362,25 +397,28 @@ def test_load_movies_and_ratings_uses_context_manager_when_no_db_injected():
 # _debug_main Tests
 # ---------------------------------------------------------------------------
 
-def test_debug_main_executes_and_prints_output(capsys):
+def test_debug_main_emits_success_event(caplog):
     fake_movies = pd.DataFrame([{"movieId": 1, "title": "Toy Story", "genres": "Animation"}])
     fake_ratings = pd.DataFrame([{"userId": 10, "movieId": 1, "rating": 4.0}])
 
-    with patch.object(mod, "load_movies_and_ratings", return_value=(fake_movies, fake_ratings)):
-        mod._debug_main()
+    caplog.set_level(logging.INFO)
+    _attach_caplog_to_logger(caplog, mod.logger)
+    try:
+        with patch.object(mod, "load_movies_and_ratings", return_value=(fake_movies, fake_ratings)):
+            mod._debug_main()
 
-    out = capsys.readouterr().out
-    assert "Movies collection sample" in out
-    assert "Ratings collection sample" in out
-    assert "Movies shape" in out
-    assert "Ratings shape" in out
+        assert _has_event(caplog, "debug_main_success")
+    finally:
+        _detach_caplog_from_logger(caplog, mod.logger)
 
 
 def test_debug_main_logs_error_on_failure(caplog):
-    with patch.object(mod, "load_movies_and_ratings",
-                      side_effect=RuntimeError("boom")), \
-         caplog.at_level(logging.ERROR):
+    caplog.set_level(logging.ERROR)
+    _attach_caplog_to_logger(caplog, mod.logger)
+    try:
+        with patch.object(mod, "load_movies_and_ratings", side_effect=RuntimeError("boom")):
+            mod._debug_main()
 
-        mod._debug_main()
-
-    assert "debug_main_failure" in caplog.text
+        assert _has_event(caplog, "debug_main_failure")
+    finally:
+        _detach_caplog_from_logger(caplog, mod.logger)
