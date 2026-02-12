@@ -8,6 +8,9 @@ venv/
 .DS_Store
 
 # Compiled Python files
+.pytest_cache/
+*.pyo
+
 __pycache__/
 *.pyc
 
