@@ -1,4 +1,3 @@
-
 import sys
 import argparse
 import pandas as pd
@@ -10,18 +9,37 @@ from .protocol import apply_baseline_gate
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluation gate for recommender system")
+
+    # Default: enforce model-vs-baseline.
+    # Dev-only escape hatch:
     parser.add_argument(
-        "--enforce-model",
+        "--no-enforce-model",
         action="store_true",
-        help="Fail if model does not beat popularity baseline",
+        help="Disable model-vs-baseline enforcement (dev-only).",
     )
+
+    # Acceptance contract:
+    # model_recall >= popularity_recall * factor
+    parser.add_argument(
+        "--model-recall-factor",
+        type=float,
+        default=1.10,
+        help="Required factor over popularity recall@k (default: 1.10).",
+    )
+
+    # Keep existing knobs for future tuning if needed
     parser.add_argument(
         "--margin",
         type=float,
         default=0.0,
-        help="Required margin over popularity baseline (recall@k)",
+        help="Additional absolute margin over required recall@k (default: 0.0).",
     )
+
     args = parser.parse_args()
+
+    enforce_model = not args.no_enforce_model
+    factor = float(args.model_recall_factor)
+    margin = float(args.margin)
 
     ratings = pd.read_csv("tests/fixtures/ratings_small.csv")
     movies = pd.read_csv("data/movies.csv")
@@ -41,34 +59,35 @@ def main() -> None:
     if not baseline_result.passed:
         sys.exit(1)
 
-    # ---- Model evaluation (optional enforcement) ----
+    # ---- Model evaluation ----
     model_metrics = evaluate_model_on_holdout(
         ratings=ratings,
         movies=movies,
         top_k=10,
         seed=42,
     )
-
     print("\nModel Metrics:")
     print(model_metrics)
 
-    if args.enforce_model:
-        model_recall = model_metrics["model"]["recall@k"]
-        baseline_recall = baseline_metrics["popularity"]["recall@k"]
+    # ---- Acceptance contract (default enforced) ----
+    pop_recall = float(baseline_metrics["popularity"]["recall@k"])
+    model_recall = float(model_metrics["model"]["recall@k"])
+    required = (pop_recall * factor) + margin
 
-        required = baseline_recall + args.margin
+    print(
+        f"\nModel Acceptance Gate: "
+        f"model_recall={model_recall:.6f}, "
+        f"required>={required:.6f} "
+        f"(factor={factor:.2f}x, margin={margin:.6f})"
+    )
 
-        print(
-            f"\nModel-vs-Baseline Gate: "
-            f"model_recall={model_recall:.6f}, "
-            f"required>={required:.6f}"
-        )
-
+    if enforce_model:
         if model_recall < required:
-            print("Model-vs-Baseline gate FAILED")
+            print("Model Acceptance gate FAILED")
             sys.exit(1)
-
-        print("Model-vs-Baseline gate PASSED")
+        print("Model Acceptance gate PASSED")
+    else:
+        print("Model enforcement disabled (dev-only).")
 
 
 if __name__ == "__main__":
