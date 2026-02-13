@@ -64,3 +64,7 @@ eval_md: eval
 clean:
 	rm -f data/similarity_matrix_user_user.csv
 	rm -f data/similarity_matrix_item_item.csv
+
+eval-gate:
+	python -m src.recommender.evaluation.cli_gate
+
