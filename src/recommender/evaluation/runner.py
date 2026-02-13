@@ -4,8 +4,42 @@ from typing import Dict, List, Set, Tuple
 
 import pandas as pd
 
-from .baselines import random_baseline
+from .baselines import popularity_baseline, random_baseline
 from .protocol import precision_at_k, recall_at_k
+
+
+_ALLOWED_USER_COLUMNS = ("user_id", "userId")
+_ALLOWED_MOVIE_COLUMNS = ("movie_id", "movieId")
+
+
+def _normalize_ratings_schema(ratings: pd.DataFrame) -> pd.DataFrame:
+    """
+    Accept external schemas and normalize to internal evaluation schema:
+      - user_id
+      - movie_id
+    """
+    cols = set(ratings.columns)
+
+    user_col = next((c for c in _ALLOWED_USER_COLUMNS if c in cols), None)
+    movie_col = next((c for c in _ALLOWED_MOVIE_COLUMNS if c in cols), None)
+
+    if user_col is None or movie_col is None:
+        raise ValueError(
+            "ratings must contain user and movie columns. "
+            f"Expected user in {_ALLOWED_USER_COLUMNS} and movie in {_ALLOWED_MOVIE_COLUMNS}. "
+            f"Found columns: {sorted(ratings.columns)}"
+        )
+
+    out = ratings.copy()
+    if user_col != "user_id":
+        out = out.rename(columns={user_col: "user_id"})
+    if movie_col != "movie_id":
+        out = out.rename(columns={movie_col: "movie_id"})
+
+    # enforce int ids (CI-safe)
+    out["user_id"] = out["user_id"].astype(int)
+    out["movie_id"] = out["movie_id"].astype(int)
+    return out
 
 
 def _validate_ratings_schema(ratings: pd.DataFrame) -> None:
@@ -37,25 +71,22 @@ def _build_per_user_holdout(ratings: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Dat
     return train, test
 
 
-def _global_popularity_ranking(train_ratings: pd.DataFrame) -> List[int]:
-    """
-    Global popularity ranking over the entire training set.
-    """
-    popularity = train_ratings["movie_id"].value_counts().sort_values(ascending=False)
-    return popularity.index.tolist()
-
-
 def evaluate_baselines(
     ratings: pd.DataFrame,
     top_k: int = 10,
     seed: int = 42,
 ) -> Dict:
+    ratings = _normalize_ratings_schema(ratings)
     _validate_ratings_schema(ratings)
 
     train, test = _build_per_user_holdout(ratings)
 
-    global_ranked_items = _global_popularity_ranking(train)
-    candidate_item_ids: List[int] = global_ranked_items[:]  # candidates = items seen in train universe
+    # Single source of truth: use the baseline implementation from baselines.py
+    unique_items = train["movie_id"].unique().tolist()
+    candidate_item_ids: List[int] = popularity_baseline(
+        train_ratings=train,
+        top_k=len(unique_items),
+    )
 
     results = {
         "random": {"precision@k": 0.0, "recall@k": 0.0},
@@ -68,7 +99,6 @@ def evaluate_baselines(
     precision_pop: List[float] = []
     recall_pop: List[float] = []
 
-    # group train by user for "seen" set
     train_by_user = train.groupby("user_id")
     test_by_user = test.groupby("user_id")
 
@@ -89,7 +119,6 @@ def evaluate_baselines(
         if len(available) >= top_k:
             rand_rec = random_baseline(available, top_k, seed=seed + int(user_id))
         else:
-            # edge case: not enough candidates
             rand_rec = available[:]
 
         precision_pop.append(precision_at_k(pop_rec, relevant, top_k))
