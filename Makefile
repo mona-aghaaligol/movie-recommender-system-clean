@@ -5,10 +5,16 @@
 #   make similarity_user    → Compute user-user similarity
 #   make similarity_item    → Compute item-item similarity
 #   make similarity_all     → Compute both similarities
-#   make test              → Run tests
-#   make eval              → Run baseline evaluation (writes metrics.json)
-#   make eval_md           → Render metrics.md from metrics.json
-#   make clean             → Clean generated outputs
+#   make test               → Run tests
+#   make eval               → Run baseline evaluation (writes metrics.json)
+#   make eval_md            → Render metrics.md from metrics.json
+#   make eval-gate          → Run evaluation gate (baseline enforced, model optional)
+#   make clean              → Clean generated outputs
+#
+# Evaluation gate args:
+#   make eval-gate
+#   make eval-gate ARGS="--enforce-model"
+#   make eval-gate ARGS="--enforce-model --margin 0.001"
 # --------------------------------------------------------------
 
 # Python interpreter
@@ -65,6 +71,9 @@ clean:
 	rm -f data/similarity_matrix_user_user.csv
 	rm -f data/similarity_matrix_item_item.csv
 
+# --------------------------------------------------------------
+# Evaluation Gate (CI-safe)
+# --------------------------------------------------------------
 eval-gate:
-	python -m src.recommender.evaluation.cli_gate
-
+	$(VENV) \
+	$(PYTHON) -m src.recommender.evaluation.cli_gate $(ARGS)
