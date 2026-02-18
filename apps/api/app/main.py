@@ -45,6 +45,10 @@ app = FastAPI(
 )
 
 
+
+# Option 1 (FAANG-grade): do not emit "request completed" logs for health checks
+HEALTHCHECK_PATHS = {"/v1/health", "/v1/ready"}
+
 @app.middleware("http")
 async def request_context_middleware(request: Request, call_next):
     """
@@ -61,6 +65,21 @@ async def request_context_middleware(request: Request, call_next):
     finally:
         duration_ms = round((time.perf_counter() - start) * 1000.0, 2)
         status_code = getattr(response, "status_code", None)
+        path = request.url.path
+
+        # Option 1: skip access-style logs for health checks to avoid log noise
+        if path not in HEALTHCHECK_PATHS:
+            logger.info(
+                "Request completed",
+                extra={
+                    "event": "request.completed",
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": path,
+                    "status_code": status_code,
+                    "duration_ms": duration_ms,
+                },
+            )
 
         logger.info(
             "Request completed",
