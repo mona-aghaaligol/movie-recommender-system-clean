@@ -15,7 +15,7 @@ router = APIRouter(tags=["health"])
         "If this endpoint fails, the container should be restarted."
     ),
 )
-def health_check() -> dict[str, str]:
+def health_check():
     return {"status": "ok"}
 
 
@@ -27,13 +27,16 @@ def health_check() -> dict[str, str]:
         "Indicates whether the application is ready to receive traffic.\n"
         "Returns 503 until startup bootstrap completes successfully."
     ),
+    responses={
+        200: {"description": "Service is ready", "content": {"application/json": {"example": {"status": "ready"}}}},
+        503: {"description": "Service is warming up", "content": {"application/json": {"example": {"status": "not_ready"}}}},
+    },
 )
-def readiness_check(request: Request) -> dict[str, str] | JSONResponse:
+def readiness_check(request: Request):
     is_ready = bool(getattr(request.app.state, "is_ready", False))
     if not is_ready:
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"status": "not_ready"},
         )
-
     return {"status": "ready"}
