@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -25,16 +26,62 @@ logger = configure_logger(__name__)
 REQUEST_ID_HEADER = "X-Request-ID"
 
 
+async def _bootstrap_in_background(app: FastAPI) -> None:
+    """
+    Run heavy bootstrap outside of startup so the server can accept requests immediately.
+    Marks app.state.is_ready=True only after the recommender service is initialized.
+    """
+    try:
+        logger.info(
+            "Background bootstrap started",
+            extra={"event": "bootstrap.bg_start"},
+        )
+
+        # bootstrap_service() is synchronous and may be heavy (Mongo + pandas)
+        service = await asyncio.to_thread(bootstrap_service)
+
+        app.state.recommender_service = service
+        app.state.is_ready = True
+
+        logger.info(
+            "Background bootstrap finished; application marked as ready",
+            extra={"event": "bootstrap.bg_ready"},
+        )
+    except Exception:
+        app.state.is_ready = False
+        logger.exception(
+            "Background bootstrap failed; application will remain not ready",
+            extra={"event": "bootstrap.bg_failed"},
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Lifespan handler:
-    - Warm up heavy dependencies at startup
-    - (Optional) cleanup at shutdown
+    Lifespan handler (FAANG-grade):
+    - Do NOT block startup on heavy dependencies.
+    - Start server quickly, then bootstrap heavy dependencies in background.
     """
-    app.state.recommender_service = bootstrap_service()
+    app.state.is_ready = False
+    app.state.recommender_service = None
+
+    # Start background bootstrap task
+    task = asyncio.create_task(_bootstrap_in_background(app))
+    app.state.bootstrap_task = task
+
     yield
-    # Cleanup hooks can be added here if needed
+
+    # Optional: graceful shutdown for the background task
+    task = getattr(app.state, "bootstrap_task", None)
+    if task is not None and not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            logger.info(
+                "Background bootstrap task cancelled on shutdown",
+                extra={"event": "bootstrap.bg_cancelled"},
+            )
 
 
 app = FastAPI(
@@ -44,6 +91,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Ensure readiness state exists even in unusual contexts
+if not hasattr(app.state, "is_ready"):
+    app.state.is_ready = False
 
 
 # Option 1 (FAANG-grade): do not emit "request completed" logs for health checks
@@ -81,20 +131,47 @@ async def request_context_middleware(request: Request, call_next):
                 },
             )
 
-        logger.info(
-            "Request completed",
-            extra={
-                "event": "request.completed",
-                "request_id": request_id,
-                "method": request.method,
-                "path": request.url.path,
-                "status_code": status_code,
-                "duration_ms": duration_ms,
-            },
-        )
-
         if response is not None:
             response.headers[REQUEST_ID_HEADER] = request_id
+
+
+@app.middleware("http")
+async def readiness_gate_middleware(request: Request, call_next):
+    """
+    FAANG-grade global readiness gate:
+    - Before app is ready, allow ONLY /v1/health and /v1/ready.
+    - All other routes return 503 with a stable error payload.
+    This prevents "Empty reply" / unpredictable responses during warm-up.
+    """
+    path = request.url.path
+
+    # Allow liveness/readiness endpoints even when not ready
+    if path in ("/v1/health", "/v1/ready"):
+        return await call_next(request)
+
+    is_ready = bool(getattr(request.app.state, "is_ready", False))
+    if not is_ready:
+        request_id = (
+            request.headers.get(REQUEST_ID_HEADER)
+            or getattr(request.state, "request_id", None)
+            or uuid.uuid4().hex
+        )
+
+        payload = {
+            "error": {
+                "code": "SERVICE_UNAVAILABLE",
+                "message": "Service is warming up. Please retry shortly.",
+                "request_id": request_id,
+            }
+        }
+
+        return JSONResponse(
+            status_code=503,
+            content=payload,
+            headers={REQUEST_ID_HEADER: request_id},
+        )
+
+    return await call_next(request)
 
 
 def _map_http_status_to_error_code(status_code: int) -> ErrorCode:
