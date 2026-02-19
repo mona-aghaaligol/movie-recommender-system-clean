@@ -1,15 +1,67 @@
+# ------------------------------------------------------------
+# Build system configuration
+# We use setuptools as the build backend (PEP 517/518 compliant)
+# ------------------------------------------------------------
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
+
+# ------------------------------------------------------------
+# Core project metadata
+# This defines the installable package and its base dependencies
+# ------------------------------------------------------------
 [project]
 name = "movie-recommender-project"
 version = "0.1.0"
 requires-python = ">=3.9"
+
+# Base runtime dependencies required by the core recommender logic
 dependencies = [
-  "pandas",
+  "pandas",   # data manipulation
+  "numpy",    # numerical computations used by models/evaluation
 ]
 
+
+# ------------------------------------------------------------
+# Optional dependency groups (FAANG-style separation of concerns)
+# Allows targeted installation:
+#   pip install .[api]
+#   pip install .[dev]
+#   pip install .[api,dev]
+#   pip install .[api,dev,ml]
+# ------------------------------------------------------------
+[project.optional-dependencies]
+
+# API runtime dependencies (serving layer only)
+api = [
+  "fastapi",             # REST API framework
+  "uvicorn[standard]",   # ASGI server for FastAPI
+  "pymongo",             # MongoDB client (required by bootstrap/load_data_from_mongo)
+]
+
+# Development & testing dependencies (local + CI tests)
+dev = [
+  "pytest",              # test runner
+  "httpx",               # required by starlette/fastapi TestClient
+]
+
+# ML-heavy dependencies (kept separate to avoid bloating baseline images)
+ml = [
+  "torch",               # required by some unit tests/models
+]
+
+# Model evaluation / experimentation dependencies
+# (kept minimal for now; expand if needed later)
+eval = [
+  # "scikit-learn",
+]
+
+
+# ------------------------------------------------------------
+# Packaging configuration
+# We follow a src/ layout to avoid import ambiguity
+# ------------------------------------------------------------
 [tool.setuptools]
 package-dir = {"" = "src"}
 
