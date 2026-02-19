@@ -76,3 +76,18 @@ clean:
 # --------------------------------------------------------------
 eval-gate:
 	python -m src.recommender.evaluation.cli_gate $(ARGS)
+
+# --------------------------------------------------------------
+# Docker (Reproducible Runtime)
+# --------------------------------------------------------------
+docker-build:
+	docker build -t movie-recommender:latest .
+
+docker-test:
+	docker run --rm movie-recommender:latest pytest -q
+
+docker-eval-gate:
+	docker run --rm movie-recommender:latest python -m src.recommender.evaluation.cli_gate $(ARGS)
+
+docker-run:
+	docker run --rm -p 8000:8000 movie-recommender:latest
