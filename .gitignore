@@ -1,43 +1,52 @@
-# Environment variables
+# =========================
+# Environment / Secrets
+# =========================
 .env
+.env.*
+*.bak
 
-# Python virtual environment
+# =========================
+# Virtual Environment
+# =========================
 venv/
 
-# macOS system files
+# =========================
+# macOS
+# =========================
 .DS_Store
 
-# Compiled Python files
-.pytest_cache/
-*.pyo
-
+# =========================
+# Python Cache / Bytecode
+# =========================
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
 
-# Model files
+# =========================
+# Build Artifacts
+# =========================
+*.egg-info/
+build/
+dist/
+
+# =========================
+# Model Artifacts
+# =========================
 models/
 *.pth
 
-# Generated similarity matrices (big auto-generated files)
+# =========================
+# Generated ML Data Artifacts
+# =========================
 similarity_matrix.csv
 similarity_matrix_item_based.csv
 user_movie_matrix.csv
-
-# Generated matrices inside data folder
-data/similarity_matrix.csv
-data/user_movie_matrix.csv
-
-# Optional: ignore JSON exports if auto-generated
-data/*.json
-__pycache__/
-*.pyc
-
-# =========================
-# Generated ML artifacts
-# =========================
 data/*similarity*.csv
 data/user_movie_matrix.csv
-models/*.pth
+data/*.json
 
-# Pytest cache
-.pytest_cache/
+# =========================
+# Large Auto-Generated Matrices
+# =========================
+data/similarity_matrix.csv

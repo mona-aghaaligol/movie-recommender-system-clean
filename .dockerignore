@@ -1,0 +1,33 @@
+# --- VCS ---
+.git
+.github
+
+# --- Local env / secrets ---
+.env
+.env.*
+*.pem
+*.key
+
+# --- Python virtualenv & caches ---
+venv/
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.py[cod]
+
+# --- Build artifacts ---
+dist/
+build/
+*.egg-info/
+
+# --- OS junk ---
+.DS_Store
+
+# --- Large datasets: ignore all, then allow only required runtime artifacts ---
+data/*
+!data/similarity_matrix_user_user.csv
+!data/similarity_matrix_item_item.csv
