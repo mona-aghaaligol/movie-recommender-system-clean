@@ -38,6 +38,11 @@ models/
 *.pth
 
 # =========================
+# Docker Image Exports (Local Artifacts)
+# =========================
+*.tar
+
+# =========================
 # Generated ML Data Artifacts
 # =========================
 similarity_matrix.csv
