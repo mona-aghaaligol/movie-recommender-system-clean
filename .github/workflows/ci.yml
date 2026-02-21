@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
 
 jobs:
   secrets_scan:
@@ -14,7 +14,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # Required for gitleaks to scan full git history
 
       - name: Run gitleaks
         uses: gitleaks/gitleaks-action@v2
@@ -22,6 +22,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   tests:
+    name: Tests + Evaluation Gate
     runs-on: ubuntu-latest
 
     steps:
@@ -43,8 +44,29 @@ jobs:
           pip install pytest pymongo python-dotenv fastapi uvicorn httpx
 
       - name: Run tests
-        run: |
-          pytest -q
+        run: pytest -q
 
       - name: Evaluation Gate (baseline quality)
         run: make eval-gate
+
+  docker_build:
+    name: Docker Build Gate (Artifact Readiness)
+    runs-on: ubuntu-latest
+    needs: [tests] # Run only after tests + evaluation gate succeed
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3 # Enables advanced build features + caching
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false # CI should validate buildability, not publish artifacts
+          tags: mrs-api:ci
+          cache-from: type=gha # Reuse GitHub Actions cache to speed up builds
+          cache-to: type=gha,mode=max # Populate cache for future runs
