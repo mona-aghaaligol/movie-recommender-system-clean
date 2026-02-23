@@ -5,6 +5,9 @@
 .env.*
 !.env.example
 *.bak
+*.pem
+*.key
+.aws/
 
 # =========================
 # Virtual Environment
