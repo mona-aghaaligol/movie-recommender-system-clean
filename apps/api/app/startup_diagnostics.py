@@ -169,13 +169,29 @@ _tls_test("www.google.com", 443, "tls_public")
 
 
 # ---------------------------------------------------------------------
-# Atlas TLS test (only if URI present)
+# Atlas TLS test (SRV resolve via PyMongo, then test each shard)
 # ---------------------------------------------------------------------
 
 if mongo_uri:
     try:
-        atlas_host = _extract_host(mongo_uri)
-        _dns_resolution(atlas_host)
-        _tls_test(atlas_host, 27017, "tls_atlas")
+        # Important: mongodb+srv host itself may not have A/AAAA records.
+        # PyMongo resolves SRV to concrete shard hostnames; we test TLS against those.
+        _safe_print(f"[diag] atlas_srv_seed_host={_extract_host(mongo_uri)}")
+
+        try:
+            from pymongo import uri_parser as _uri_parser
+        except Exception as e:
+            _safe_print(f"[diag] atlas_srv_resolve_error import_pymongo_uri_parser {repr(e)}")
+            raise
+
+        parsed = _uri_parser.parse_uri(mongo_uri, warn=False)
+        nodelist = parsed.get("nodelist") or []
+
+        _safe_print(f"[diag] atlas_srv_nodelist={nodelist}")
+
+        for (h, p) in nodelist:
+            _dns_resolution(h)
+            _tls_test(h, int(p or 27017), "tls_atlas_shard")
+
     except Exception:
         _safe_print(f"[diag] atlas_test_error {traceback.format_exc()}")
