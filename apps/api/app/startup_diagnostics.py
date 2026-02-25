@@ -136,7 +136,7 @@ def _dns_resolution(host: str):
 
 
 # ---------------------------------------------------------------------
-# TLS test helper
+# TLS test helper (hostname -> connect(host), SNI=host)
 # ---------------------------------------------------------------------
 
 def _tls_test(host: str, port: int, label: str):
@@ -161,6 +161,31 @@ def _tls_test(host: str, port: int, label: str):
 
 
 # ---------------------------------------------------------------------
+# TLS test helper (IP connect, but SNI=hostname)
+# ---------------------------------------------------------------------
+
+def _tls_test_ip(ip: str, sni_host: str, port: int, label: str):
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection((ip, port), timeout=10) as sock:
+            with context.wrap_socket(sock, server_hostname=sni_host) as ssock:
+                cert = ssock.getpeercert()
+                _safe_print(
+                    f"[diag] {label} ip={ip} sni={sni_host} port={port} "
+                    f"result={{'status': 'ok', "
+                    f"'tls_version': '{ssock.version()}', "
+                    f"'cipher': {ssock.cipher()}, "
+                    f"'peer_cert_subject': {cert.get('subject')}, "
+                    f"'peer_cert_issuer': {cert.get('issuer')}}}"
+                )
+    except Exception as e:
+        _safe_print(
+            f"[diag] {label} ip={ip} sni={sni_host} port={port} "
+            f"result={{'status': 'fail', 'error': {repr(e)}}}"
+        )
+
+
+# ---------------------------------------------------------------------
 # Public TLS test (control test)
 # ---------------------------------------------------------------------
 
@@ -170,13 +195,15 @@ _tls_test("www.google.com", 443, "tls_public")
 
 # ---------------------------------------------------------------------
 # Atlas TLS test (SRV resolve via PyMongo, then test each shard)
+# + IP+SNI test for shard-00-02
 # ---------------------------------------------------------------------
 
 if mongo_uri:
     try:
         # Important: mongodb+srv host itself may not have A/AAAA records.
         # PyMongo resolves SRV to concrete shard hostnames; we test TLS against those.
-        _safe_print(f"[diag] atlas_srv_seed_host={_extract_host(mongo_uri)}")
+        seed_host = _extract_host(mongo_uri)
+        _safe_print(f"[diag] atlas_srv_seed_host={seed_host}")
 
         try:
             from pymongo import uri_parser as _uri_parser
@@ -190,8 +217,23 @@ if mongo_uri:
         _safe_print(f"[diag] atlas_srv_nodelist={nodelist}")
 
         for (h, p) in nodelist:
+            port = int(p or 27017)
             _dns_resolution(h)
-            _tls_test(h, int(p or 27017), "tls_atlas_shard")
+            _tls_test(h, port, "tls_atlas_shard")
+
+            # Focused IP+SNI test (kept minimal to avoid noisy logs)
+            # If this succeeds but hostname TLS fails, it strongly suggests DNS/egress path interference.
+            if h == "ac-f6c804o-shard-00-02.tjh5xg8.mongodb.net":
+                try:
+                    infos = socket.getaddrinfo(h, port)
+                    ip = infos[0][4][0] if infos else None
+                except Exception:
+                    ip = None
+
+                if ip:
+                    _tls_test_ip(ip, h, port, "tls_atlas_ip_sni")
+                else:
+                    _safe_print(f"[diag] tls_atlas_ip_sni_skip reason=no_ip host={h}")
 
     except Exception:
         _safe_print(f"[diag] atlas_test_error {traceback.format_exc()}")
