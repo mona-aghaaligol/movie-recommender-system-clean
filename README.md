@@ -38,6 +38,10 @@ Older structures may still exist in the commit history.
 - PyTorch (matrix factorization)
 - FastAPI
 - Pytest
+- Docker
+- AWS ECS (Fargate)
+- AWS Application Load Balancer
+- MongoDB Atlas
 
 ---
 
@@ -56,87 +60,265 @@ Older structures may still exist in the commit history.
 - [x] Finalize Service layer
 - [x] API layer (FastAPI)
 - [x] Evaluation and metrics
-- [ ] Deployment and observability
+- [x] Docker containerization
+- [x] AWS production deployment
+- [ ] Observability and monitoring
+- [ ] Rate limiting
+- [ ] Performance benchmarking
 
 ---
 
-## Architecture Overview (DDD-Inspired)
+# Architecture Overview (DDD-Inspired)
 
 This project follows a **Domain-Driven Design (DDD) inspired** architecture with a clear separation of concerns between layers.
 
 ### High-level Flow
 
-API (`apps/api`) → Service (`src/recommender/service`) → Domain (`src/recommender/domain`)  
+API (`apps/api`) → Service (`src/recommender/service`) → Domain (`src/recommender/domain`)
+
 Infrastructure and data modules provide inputs to the service layer.
-
-### Layers
-
-**Domain (`src/recommender/domain/`)**
-- Contains pure recommendation and ranking logic.
-- All computations are performed in memory.
-- **No I/O**:
-  - No database access
-  - No file reads or writes
-  - No logging or external side effects
-- Fully deterministic and unit-testable.
-- Example modules:
-  - `predict_cf.py`
-  - `ranking.py`
-  - `recommend_for_user.py`
-
-**Service (`src/recommender/service/`)**
-- Orchestrates domain logic and coordinates dependencies.
-- Prepares inputs for the domain layer.
-- Maps domain outputs to structured, typed results.
-- Keeps the domain isolated from infrastructure concerns.
-
-**API (`apps/api/`)**
-- Delivery layer implemented with FastAPI.
-- Exposes HTTP endpoints and request/response schemas.
-- Contains no business logic.
-- Enforces error contracts and request lifecycle observability.
-
-**Infrastructure / Data**
-- Handles persistence and external systems (MongoDB, CSV/JSON, loaders, writers).
-- Responsible only for data access and side effects.
-- Supplies data to the service layer.
-- Precomputed similarity matrices are generated via the data preparation pipeline and are intentionally not versioned.
-
-**Scripts (`scripts/`)**
-- One-off runnable utilities and demos (e.g. evaluation runners, Mongo smoke tests).
-- Kept outside `src/` to maintain an import-safe package structure.
-
-### Key Design Principle
-
-> The domain layer is independent of I/O.  
-> All side effects (databases, files, network, logging) live outside the domain layer.
 
 ---
 
-## Evaluation (Offline)
+## Layers
+
+### Domain (`src/recommender/domain/`)
+
+Contains pure recommendation and ranking logic.
+
+Characteristics:
+
+- All computations are performed in memory
+- No I/O operations
+- Fully deterministic and unit-testable
+
+Restrictions:
+
+- No database access
+- No file reads or writes
+- No logging
+- No network calls
+
+Example modules:
+
+- `predict_cf.py`
+- `ranking.py`
+- `recommend_for_user.py`
+
+---
+
+### Service (`src/recommender/service/`)
+
+The service layer orchestrates domain logic and coordinates dependencies.
+
+Responsibilities:
+
+- Prepare inputs for the domain layer
+- Call domain algorithms
+- Map domain outputs to structured response objects
+- Maintain separation between domain and infrastructure
+
+---
+
+### API (`apps/api/`)
+
+The API layer exposes the system through HTTP endpoints using FastAPI.
+
+Responsibilities:
+
+- Request validation
+- Response serialization
+- API contracts
+- Error handling
+- Request lifecycle observability
+
+Important rule:
+
+The API layer contains **no business logic**.
+
+---
+
+### Infrastructure / Data
+
+Infrastructure components handle all external systems.
+
+Examples:
+
+- MongoDB Atlas
+- CSV / JSON data sources
+- Data loaders
+- Persistence
+
+Responsibilities:
+
+- Data access
+- External integrations
+- Side effects
+
+Infrastructure supplies data to the service layer but never to the domain directly.
+
+---
+
+### Scripts (`scripts/`)
+
+This directory contains standalone utilities such as:
+
+- evaluation runners
+- data preparation tasks
+- MongoDB connectivity tests
+
+Scripts are intentionally placed outside `src/` to keep the main package import-safe.
+
+---
+
+## Key Design Principle
+
+> The domain layer is independent of I/O.
+
+All side effects such as databases, files, network calls, and logging live **outside the domain layer**.
+
+---
+
+# Evaluation (Offline)
 
 This project includes a reproducible offline evaluation protocol for recommendation quality.
 
-### Protocol (Leakage-safe)
+---
 
-- Split: per-user holdout (leave-one-out)
-- For each eligible user (>= 2 interactions):
-  - test item = last interaction
-  - train = remaining interactions
-- Candidates: global train universe, excluding items already seen in train per user
+## Protocol (Leakage-safe)
 
-### Metrics
+Evaluation follows a **per-user holdout strategy**.
 
-- Precision@K
-- Recall@K
+For each eligible user:
 
-### Baselines
+- test item = last interaction
+- train set = remaining interactions
 
-- Popularity baseline (global most-popular items)
-- Random baseline (deterministic via seed)
+Users must have **at least two interactions** to participate in evaluation.
 
-### Run evaluation
+Candidate items are drawn from the global training universe excluding items already seen in the user's training history.
+
+---
+
+## Metrics
+
+The evaluation framework computes:
+
+- **Precision@K**
+- **Recall@K**
+
+These metrics allow comparison between recommendation algorithms and baselines.
+
+---
+
+## Baselines
+
+Two baselines are implemented:
+
+**Popularity baseline**
+
+- Recommends globally most popular items.
+
+**Random baseline**
+
+- Random recommendation with deterministic seed.
+
+These baselines allow performance comparison with the recommendation model.
+
+---
+
+## Run Evaluation
 
 ```bash
 make eval
 make eval_md
+```
+
+---
+
+# Production Architecture
+
+The system is deployed on AWS using a containerized architecture.
+
+```mermaid
+flowchart TD
+
+USER[User / Client]
+
+DOMAIN[api.reelradarhq.com]
+
+subgraph AWS["AWS Cloud (us-east-1)"]
+
+ALB["Application Load Balancer"]
+
+subgraph ECS_CLUSTER["ECS Cluster: mrs-prod-cluster"]
+
+SERVICE["ECS Service: mrs-api-service"]
+
+TASK["Fargate Task"]
+
+CONTAINER["Docker Container"]
+
+API["FastAPI Application"]
+
+REC["Recommendation Service"]
+
+end
+
+end
+
+MDB["MongoDB Atlas"]
+
+USER --> DOMAIN
+DOMAIN --> ALB
+ALB --> SERVICE
+SERVICE --> TASK
+TASK --> CONTAINER
+CONTAINER --> API
+API --> REC
+REC --> MDB
+```
+
+---
+
+## Live API
+
+Production endpoint:
+
+```
+https://api.reelradarhq.com
+```
+
+Swagger documentation:
+
+```
+https://api.reelradarhq.com/docs
+```
+
+Health endpoint:
+
+```
+https://api.reelradarhq.com/v1/health
+```
+
+Example request:
+
+```
+GET /v1/recommendations/1?limit=5
+```
+
+---
+
+## Engineering Focus
+
+This project emphasizes **production-grade engineering practices**, including:
+
+- Clean architecture separation
+- Deterministic domain logic
+- API contracts
+- Automated tests
+- Offline evaluation protocols
+- Containerized deployment
+- Cloud-native infrastructure
+
+The goal is to demonstrate how a machine learning system can be structured and deployed with real-world software engineering discipline.
