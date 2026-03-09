@@ -322,3 +322,171 @@ This project emphasizes **production-grade engineering practices**, including:
 - Cloud-native infrastructure
 
 The goal is to demonstrate how a machine learning system can be structured and deployed with real-world software engineering discipline.
+
+
+---
+
+## System Design Notes
+
+### Why FastAPI
+
+FastAPI was chosen as the API framework because it provides:
+
+- strong support for typed request and response schemas
+- automatic OpenAPI / Swagger documentation
+- clean integration with Python service layers
+- fast development velocity for production-oriented APIs
+
+This makes it a strong fit for a recommendation service that benefits from explicit API contracts and maintainable endpoint design.
+
+### Why ECS Fargate
+
+AWS ECS Fargate was selected for container orchestration because it allows the service to run without managing EC2 instances directly.
+
+Benefits include:
+
+- simpler operational model
+- managed container runtime
+- easier production deployment for a single-service architecture
+- clean path toward service scaling and rolling updates
+
+This keeps infrastructure complexity lower while still using a production-grade AWS deployment model.
+
+### Why MongoDB Atlas
+
+MongoDB Atlas was used as the managed database platform because it provides:
+
+- managed hosting
+- cloud connectivity
+- operational simplicity for application data
+- flexibility for evolving metadata and recommendation-related records
+
+Using Atlas also keeps database operations outside the application host and aligns well with cloud-native deployment practices.
+
+### Why a Layered Architecture
+
+The system is intentionally structured into separate layers:
+
+- API layer
+- Service layer
+- Domain layer
+- Infrastructure layer
+
+This separation improves:
+
+- maintainability
+- testability
+- change isolation
+- long-term extensibility
+
+The most important design rule is that business logic remains isolated from I/O and infrastructure concerns.
+
+### Scalability Direction
+
+The current architecture is designed as a production-ready single-service deployment, but it can evolve further.
+
+Potential scaling directions include:
+
+- horizontal scaling of ECS tasks behind the load balancer
+- request throttling and rate limiting
+- metrics collection and monitoring dashboards
+- caching of frequently requested recommendation results
+- background refresh pipelines for recommendation artifacts
+
+### Reliability Direction
+
+The production deployment already includes several reliability-oriented foundations:
+
+- containerized deployment
+- health endpoint
+- readiness behavior
+- load balancer routing
+- managed cloud infrastructure
+
+Future reliability improvements can include:
+
+- stronger observability
+- alerting dashboards
+- failure-mode documentation
+- automated deployment workflows
+
+
+---
+
+## Quick Start
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/mona-aghaaligol/movie-recommender-system-clean.git
+cd movie-recommender-system-clean
+```
+
+---
+
+### 2. Create a Virtual Environment
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+---
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements/base.txt
+pip install -r requirements/dev.txt
+```
+
+---
+
+### 4. Run the API Locally
+
+```bash
+uvicorn apps.api.app.main:app --reload
+```
+
+The API will start at:
+
+```
+http://127.0.0.1:8000
+```
+
+Swagger documentation:
+
+```
+http://127.0.0.1:8000/docs
+```
+
+---
+
+### 5. Example Request
+
+```
+GET /v1/recommendations/1?limit=5
+```
+
+Example using curl:
+
+```bash
+curl "http://127.0.0.1:8000/v1/recommendations/1?limit=5"
+```
+
+---
+
+## Running Tests
+
+```bash
+pytest
+```
+
+---
+
+## Running Evaluation
+
+```bash
+make eval
+make eval_md
+```
