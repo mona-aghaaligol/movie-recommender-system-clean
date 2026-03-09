@@ -98,6 +98,22 @@ if not hasattr(app.state, "is_ready"):
     app.state.is_ready = False
 
 
+@app.get("/", tags=["root"])
+async def root() -> JSONResponse:
+    """
+    Root landing endpoint for the API.
+    """
+    return JSONResponse(
+        content={
+            "service": "Movie Recommender API",
+            "status": "ok",
+            "docs": "/docs",
+            "health": "/v1/health",
+            "ready": "/v1/ready",
+        }
+    )
+
+
 @app.middleware("http")
 async def readiness_gate_middleware(request: Request, call_next):
     """
@@ -222,24 +238,23 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return _error_response(
         status_code=422,
         code=ErrorCode.VALIDATION_ERROR,
-        message="Request validation failed",
+        message="Request validation error",
         request_id=request_id,
-        details={"errors": exc.errors()},
+        details=exc.errors(),
     )
 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     request_id = get_request_id(request)
+
     code = _map_http_status_to_error_code(exc.status_code)
+    message = exc.detail if isinstance(exc.detail, str) else "HTTP error"
 
-    message = exc.detail if isinstance(exc.detail, str) else "Request failed"
-    details = exc.detail if isinstance(exc.detail, dict) else None
-
-    logger.info(
+    logger.warning(
         "HTTP exception raised",
         extra={
-            "event": "request.http_exception",
+            "event": "error.http_exception",
             "request_id": request_id,
             "method": request.method,
             "path": request.url.path,
@@ -253,7 +268,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         code=code,
         message=message,
         request_id=request_id,
-        details=details,
+        details=None,
     )
 
 
