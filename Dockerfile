@@ -3,7 +3,7 @@
 ############################
 # Builder: build wheels (offline-friendly)
 ############################
-FROM python:3.9-slim AS builder
+FROM python:3.9-slim-bullseye AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -22,7 +22,13 @@ RUN python -m pip install --upgrade pip \
 ############################
 # Runtime: minimal image, non-root, offline install
 ############################
-FROM python:3.9-slim AS runtime
+FROM python:3.9-slim-bullseye AS runtime
+
+# --- TLS/CA certificates for outbound HTTPS/TLS (MongoDB Atlas needs this) ---
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && update-ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -55,4 +61,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/health').read()" || exit 1
 
-CMD ["sh", "-c", "uvicorn apps.api.app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "python -m apps.api.app.startup_diagnostics || true; uvicorn apps.api.app.main:app --host 0.0.0.0 --port ${PORT}"]

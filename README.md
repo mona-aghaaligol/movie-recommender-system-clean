@@ -234,50 +234,11 @@ make eval
 make eval_md
 ```
 
----
-
 # Production Architecture
 
+![Production Architecture](docs/images/production-architecture.png)
+
 The system is deployed on AWS using a containerized architecture.
-
-```mermaid
-flowchart TD
-
-USER[User / Client]
-
-DOMAIN[api.reelradarhq.com]
-
-subgraph AWS["AWS Cloud (us-east-1)"]
-
-ALB["Application Load Balancer"]
-
-subgraph ECS_CLUSTER["ECS Cluster: mrs-prod-cluster"]
-
-SERVICE["ECS Service: mrs-api-service"]
-
-TASK["Fargate Task"]
-
-CONTAINER["Docker Container"]
-
-API["FastAPI Application"]
-
-REC["Recommendation Service"]
-
-end
-
-end
-
-MDB["MongoDB Atlas"]
-
-USER --> DOMAIN
-DOMAIN --> ALB
-ALB --> SERVICE
-SERVICE --> TASK
-TASK --> CONTAINER
-CONTAINER --> API
-API --> REC
-REC --> MDB
-```
 
 ---
 
