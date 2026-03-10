@@ -20,13 +20,16 @@ from .routes.health import router as health_router
 from .routes.recommendations import router as recommendations_router
 
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
+
 configure_app_logging()
 logger = configure_logger(__name__)
 
 REQUEST_ID_HEADER = "X-Request-ID"
 
 # Do not emit request completion logs for health endpoints
-HEALTHCHECK_PATHS = {"/v1/health", "/v1/ready"}
+HEALTHCHECK_PATHS = {"/v1/health", "/v1/ready", "/metrics"}
 
 
 async def _bootstrap_in_background(app: FastAPI) -> None:
@@ -92,6 +95,7 @@ app = FastAPI(
     description="Production-oriented movie recommendation service",
     lifespan=lifespan,
 )
+Instrumentator().instrument(app).expose(app)
 
 # Ensure readiness flag always exists
 if not hasattr(app.state, "is_ready"):

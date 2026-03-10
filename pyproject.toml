@@ -38,6 +38,7 @@ api = [
   "fastapi",             # REST API framework
   "uvicorn[standard]",   # ASGI server for FastAPI
   "pymongo",             # MongoDB client (required by bootstrap/load_data_from_mongo)
+  "prometheus-fastapi-instrumentator",
 ]
 
 # Development & testing dependencies (local + CI tests)
