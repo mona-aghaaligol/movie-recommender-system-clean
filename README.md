@@ -451,3 +451,11 @@ pytest
 make eval
 make eval_md
 ```
+
+---
+
+## 🚀 Infrastructure Update (April 2026)
+
+- Migrated from standalone ECS tasks to ECS Service architecture
+- Ensured compatibility with AWS ECS task retirement changes
+- Achieved zero-downtime migration in production
