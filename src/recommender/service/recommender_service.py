@@ -16,6 +16,7 @@ Data and algorithm execution dependencies are injected from the outside
 
 from dataclasses import dataclass, replace
 from typing import Dict, List, Optional
+from src.recommender.observability.metrics import RECOMMENDER_FALLBACK_TOTAL
 
 import pandas as pd
 
@@ -250,6 +251,7 @@ class RecommenderService:
             user_history_count = 0
 
         if user_history_count == 0:
+            RECOMMENDER_FALLBACK_TOTAL.labels(reason="cold_start").inc()
             return _fallback_popularity_recs(
                 user_id=user_id,
                 limit=limit,
@@ -268,6 +270,7 @@ class RecommenderService:
                 params=effective_params,
             )
         except RecommendationError:
+            RECOMMENDER_FALLBACK_TOTAL.labels(reason="model_error").inc()
             return _fallback_popularity_recs(
                 user_id=user_id,
                 limit=limit,
@@ -275,6 +278,7 @@ class RecommenderService:
                 movies_df=self._movies_df,
             )
         except Exception:
+            RECOMMENDER_FALLBACK_TOTAL.labels(reason="model_error").inc()
             return _fallback_popularity_recs(
                 user_id=user_id,
                 limit=limit,
@@ -284,6 +288,7 @@ class RecommenderService:
 
         # Defensive: handle empty output early => fallback (Spec v1)
         if domain_df is None or getattr(domain_df, "empty", True):
+            RECOMMENDER_FALLBACK_TOTAL.labels(reason="empty_result").inc()
             return _fallback_popularity_recs(
                 user_id=user_id,
                 limit=limit,

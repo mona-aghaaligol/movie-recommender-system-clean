@@ -13,6 +13,12 @@ from fastapi.responses import JSONResponse
 from src.recommender.bootstrap import bootstrap_service
 from src.recommender.logging_utils import configure_logger
 
+from src.recommender.observability.metrics import (
+    HTTP_REQUESTS_TOTAL,
+    HTTP_REQUEST_DURATION_SECONDS,
+    HTTP_ERRORS_TOTAL,
+)
+
 from .error_codes import ErrorCode
 from .errors import get_request_id, make_error
 from .logging_setup import configure_app_logging
@@ -117,7 +123,6 @@ async def root() -> JSONResponse:
         }
     )
 
-
 @app.middleware("http")
 async def readiness_gate_middleware(request: Request, call_next):
     """
@@ -171,9 +176,22 @@ async def request_context_middleware(request: Request, call_next):
         return response
 
     finally:
-        duration_ms = round((time.perf_counter() - start) * 1000.0, 2)
+        duration_seconds = time.perf_counter() - start
+        duration_ms = round(duration_seconds * 1000.0, 2)
         status_code = getattr(response, "status_code", None)
         path = request.url.path
+        
+        HTTP_REQUEST_DURATION_SECONDS.labels(
+            method=request.method,
+            path=path,
+            status_code=str(status_code),
+        ).observe(duration_seconds)
+        
+        HTTP_REQUESTS_TOTAL.labels(
+            method=request.method,
+            path=path,
+            status_code=str(status_code),
+        ).inc()
 
         if path not in HEALTHCHECK_PATHS:
             logger.info(
@@ -238,13 +256,19 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "code": ErrorCode.VALIDATION_ERROR.value,
         },
     )
+    
+    HTTP_ERRORS_TOTAL.labels(
+        path=request.url.path,
+        status_code="422",
+        error_code=ErrorCode.VALIDATION_ERROR.value,
+    ).inc()
 
     return _error_response(
         status_code=422,
         code=ErrorCode.VALIDATION_ERROR,
         message="Request validation error",
         request_id=request_id,
-        details=exc.errors(),
+        details={"errors": exc.errors()},
     )
 
 
@@ -266,7 +290,13 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "code": code.value,
         },
     )
-
+    
+    HTTP_ERRORS_TOTAL.labels(
+        path=request.url.path,
+        status_code=str(exc.status_code),
+        error_code=code.value,
+    ).inc()
+    
     return _error_response(
         status_code=exc.status_code,
         code=code,
@@ -290,6 +320,12 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
             "code": ErrorCode.INTERNAL_ERROR.value,
         },
     )
+    
+    HTTP_ERRORS_TOTAL.labels(
+        path=request.url.path,
+        status_code="500",
+        error_code=ErrorCode.INTERNAL_ERROR.value,
+    ).inc()
 
     return _error_response(
         status_code=500,
