@@ -6,6 +6,8 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -107,6 +109,19 @@ Instrumentator().instrument(app).expose(app)
 if not hasattr(app.state, "is_ready"):
     app.state.is_ready = False
 
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/", tags=["root"])
 async def root() -> JSONResponse:
